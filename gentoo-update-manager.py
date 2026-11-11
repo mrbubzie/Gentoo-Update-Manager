@@ -101,7 +101,9 @@ MOUSE
 
 KEYBOARD
 
-  1 2 3 / Tab   switch tabs        Up/Down, PgUp/PgDn, Home/End   move
+  1 2 3 / Left/Right  switch top tabs     Up/Down, PgUp/PgDn, Home/End  move
+  Tab / Shift-Tab    focus bottom buttons and return to the package list
+  Bottom buttons: Left/Right selects, Enter/Space activates, Esc returns
   Space         tick / untick      /  search      Esc  clear search
   A / N         select all / none  M or F10  menu    F1 or ?  this help
   Q             quit
@@ -253,6 +255,7 @@ class App:
         self.scr = scr
         self.cfg = load_config()
         self.tab = 0
+        self.button_focus = None
         self.updates, self.installed, self.inst_idx = [], [], {}
         self.checked = False
         self.raw = ""
@@ -272,6 +275,7 @@ class App:
 
     # ---------------------------------------------------------- setup ----
     def init_ui(self):
+        self.scr.keypad(True)
         curses.curs_set(0)
         curses.start_color()
         try:
@@ -296,6 +300,49 @@ class App:
         }
         curses.mousemask(curses.ALL_MOUSE_EVENTS)
         curses.mouseinterval(0)
+
+    def read_key(self):
+        """Accept both normal (CSI) and application (SS3) navigation keys.
+
+        Some terminals send sequences different from their terminfo entry.
+        Keep curses decoding for mouse/function keys, with a fallback for
+        navigation sequences it leaves undecoded.
+        """
+        key = self.scr.getch()
+        if key != 27:
+            return key
+        sequences = {}
+        for prefix in ("[", "O"):
+            for suffix, value in (("A", curses.KEY_UP), ("B", curses.KEY_DOWN),
+                                  ("C", curses.KEY_RIGHT), ("D", curses.KEY_LEFT),
+                                  ("H", curses.KEY_HOME), ("F", curses.KEY_END)):
+                sequences[prefix + suffix] = value
+        sequences.update({"[1~": curses.KEY_HOME, "[7~": curses.KEY_HOME,
+                          "[4~": curses.KEY_END, "[8~": curses.KEY_END,
+                          "[5~": curses.KEY_PPAGE, "[6~": curses.KEY_NPAGE,
+                          "[Z": curses.KEY_BTAB})
+        delay = getattr(self, "input_timeout", -1)
+        pending = []
+        try:
+            self.scr.timeout(150)
+            while True:
+                part = self.scr.getch()
+                if part == -1:
+                    break
+                pending.append(part)
+                if not 0 <= part < 128:
+                    break
+                sequence = "".join(map(chr, pending))
+                if sequence in sequences:
+                    return sequences[sequence]
+                if not any(s.startswith(sequence) for s in sequences):
+                    break
+        finally:
+            self.scr.timeout(delay)
+        # Preserve unrelated input following a standalone Escape.
+        for part in reversed(pending):
+            curses.ungetch(part)
+        return key
 
     def put(self, y, x, s, attr=0):
         h, w = self.scr.getmaxyx()
@@ -461,7 +508,7 @@ class App:
         self.draw_buttons(h - 3, w)
         status = self.msg or TIPS[self.tip % len(TIPS)]
         self.put(h - 1, 1, status, A["warn"] if self.msg else A["dim"])
-        hint = "F1 Help  Q Quit"
+        hint = "Tab Buttons  F1 Help  Q Quit"
         if w - len(hint) - 2 > len(status) + 3:
             self.put(h - 1, w - len(hint) - 2, hint, A["dim"])
 
@@ -570,7 +617,7 @@ class App:
 
     def draw_buttons(self, y0, w):
         A, x, y = self.A, 1, y0
-        for lab, _, fn, style in self.buttons():
+        for index, (lab, _, fn, style) in enumerate(self.buttons()):
             text = lab.replace("&", "")
             bw = len(text) + 2
             if x + bw > w - 1:
@@ -578,6 +625,8 @@ class App:
             if y > y0 + 1:
                 break
             attr = {"n": A["btn"], "p": A["btn_ok"], "d": A["btn_bad"]}[style]
+            if self.button_focus == index:
+                attr = A["tab_on"] | curses.A_BOLD
             self.put(y, x, f" {text} ", attr)
             if "&" in lab:
                 hk = lab.index("&")
@@ -631,7 +680,7 @@ class App:
             self.draw()
             hits = self.box(title, lines, width, style, buttons, sel)
             self.scr.refresh()
-            k = self.scr.getch()
+            k = self.read_key()
             if k == curses.KEY_MOUSE:
                 m = self.mouse()
                 if m and m[0] & LEFT:
@@ -674,7 +723,7 @@ class App:
                 self.put(y0 + 1 + i, x0 + 1, f" {label:<{bw - 4}} ", attr)
                 hits.append((y0 + 1 + i, x0 + 1, bw - 2, i))
             self.scr.refresh()
-            k = self.scr.getch()
+            k = self.read_key()
             if k == curses.KEY_MOUSE:
                 m = self.mouse()
                 if m and m[0] & LEFT:
@@ -701,7 +750,7 @@ class App:
             self.draw()
             self.box(title, lines + ["", (f"> {text}_", curses.A_BOLD), "", ("Enter = OK    Esc = cancel", self.A["dim"])])
             self.scr.refresh()
-            k = self.scr.getch()
+            k = self.read_key()
             if k in (10, 13, curses.KEY_ENTER):
                 return text.strip()
             if k == 27:
@@ -722,7 +771,7 @@ class App:
                     self.put(1 + i, 1, lines[top + i])
             self.put(h - 1, 1, "Up/Down, PgUp/PgDn or mouse wheel to scroll  -  Q or Esc to close", self.A["dim"])
             self.scr.refresh()
-            k = self.scr.getch()
+            k = self.read_key()
             if k in (ord("q"), 27, 10, 13):
                 return
             if k == curses.KEY_MOUSE:
@@ -753,13 +802,14 @@ class App:
             self.msg = f"Couldn't start {cmd[0]}: {e}"
             return None
         t0, i, cancelled = time.time(), 0, False
+        self.input_timeout = 120
         self.scr.timeout(120)
         while proc.poll() is None:
             self.draw()
             self.box(title, [text, "", f"  {'|/-\\'[i % 4]}  working... {int(time.time() - t0)}s", "",
                              ("Esc = cancel", self.A["dim"])], width=60)
             self.scr.refresh()
-            k = self.scr.getch()
+            k = self.read_key()
             i += 1
             if k == curses.KEY_MOUSE:
                 self.mouse()
@@ -767,6 +817,7 @@ class App:
                 proc.terminate()
                 cancelled = True
                 break
+        self.input_timeout = -1
         self.scr.timeout(-1)
         proc.wait()
         out.seek(0)
@@ -812,6 +863,7 @@ class App:
         except (EOFError, KeyboardInterrupt):
             pass
         curses.reset_prog_mode()
+        self.scr.keypad(True)
         self.scr.clear()
         self.scr.refresh()
         return rc
@@ -1085,6 +1137,7 @@ class App:
     # ----------------------------------------------------------- input ----
     def switch(self, i):
         self.tab, self.search, self.searching = i, "", False
+        self.button_focus = None
 
     def on_mouse(self):
         m = self.mouse()
@@ -1103,10 +1156,13 @@ class App:
                     elif kind == "tab":
                         self.switch(arg)
                     elif kind == "search":
+                        self.button_focus = None
                         self.searching = True
                     elif kind == "btn":
+                        self.button_focus = next(i for i, button in enumerate(self.buttons()) if button[2] == arg)
                         arg()
                     elif kind == "row":
+                        self.button_focus = None
                         self.cursor[self.tab] = arg
                         if x < 4 and self.tab < 2:
                             self.toggle(advance=False)
@@ -1136,6 +1192,26 @@ class App:
             return self.on_mouse()
         if self.searching:
             return self.search_key(k)
+        if k in (9, curses.KEY_BTAB):
+            count = len(self.buttons())
+            step = 1 if k == 9 else -1
+            if self.button_focus is None:
+                self.button_focus = 0 if step == 1 else count - 1
+            else:
+                index = self.button_focus + step
+                self.button_focus = index if 0 <= index < count else None
+            return
+        if self.button_focus is not None:
+            if k in (curses.KEY_LEFT, curses.KEY_RIGHT):
+                step = 1 if k == curses.KEY_RIGHT else -1
+                self.button_focus = (self.button_focus + step) % len(self.buttons())
+                return
+            if k in (10, 13, curses.KEY_ENTER, ord(" ")):
+                self.buttons()[self.button_focus][2]()
+                return
+            if k in (27, curses.KEY_UP, curses.KEY_DOWN):
+                self.button_focus = None
+                return
         if k in (ord("q"), ord("Q")):
             self.want_quit = True
         elif k in (curses.KEY_F1, ord("?")):
@@ -1144,11 +1220,12 @@ class App:
             self.main_menu()
         elif k in (ord("1"), ord("2"), ord("3")):
             self.switch(k - ord("1"))
-        elif k == 9:
+        elif k == curses.KEY_RIGHT:
             self.switch((t + 1) % 3)
-        elif k == curses.KEY_BTAB:
+        elif k == curses.KEY_LEFT:
             self.switch((t - 1) % 3)
         elif k == ord("/"):
+            self.button_focus = None
             self.searching = True
         elif k == 27:
             self.search = ""
@@ -1181,7 +1258,7 @@ class App:
         while not self.want_quit:
             self.draw()
             self.scr.refresh()
-            k = self.scr.getch()
+            k = self.read_key()
             self.msg = ""
             self.tip += 1 if k != -1 else 0
             self.handle(k)
@@ -1193,7 +1270,7 @@ def main():
     if not sys.stdout.isatty():
         sys.exit(f"{APP}: needs an interactive terminal.")
     locale.setlocale(locale.LC_ALL, "")
-    os.environ.setdefault("ESCDELAY", "25")
+    os.environ.setdefault("ESCDELAY", "150")
     curses.wrapper(lambda scr: App(scr).run())
 
 
