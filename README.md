@@ -1,5 +1,8 @@
 # Gentoo Update Manager — Plasma-style GUI
 
+<img width="1343" height="1304" alt="Screenshot_20261114_141333" src="https://github.com/user-attachments/assets/00335890-8f3d-4e56-9077-66e97911d47b" />
+
+
 Gentoo-only PySide6/Qt 6 frontend using the original `gentoo-update-manager.py` as its Portage data backend. The interface uses KDE/Qt system palette colors and follows light/dark theme changes while open. It installs a `.desktop` launcher in your user application menu.
 
 ## Gentoo dependencies
