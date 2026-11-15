@@ -1,57 +1,53 @@
-# Gentoo Update Manager — Plasma GUI Preview v1.0.0
-<img width="1343" height="1304" alt="Screenshot_20261114_141333" src="https://github.com/user-attachments/assets/50147c1f-c9a2-4e8d-bf28-34577522042e" />
+# Gentoo Update Manager — Plasma-style GUI
 
-Introducing a redesigned **Gentoo Update Manager**, featuring a modern KDE Plasma-inspired graphical interface built with Python and PySide6 (Qt 6).
+Gentoo-only PySide6/Qt 6 frontend using the original `gentoo-update-manager.py` as its Portage data backend. The interface uses KDE/Qt system palette colors and follows light/dark theme changes while open. It installs a `.desktop` launcher in your user application menu.
 
-Originally developed as a terminal-based update manager, this version replaces the curses TUI with a graphical application while retaining Gentoo Portage integration.
+## Gentoo dependencies
 
-### What's New
-
-- **Modern Plasma-inspired interface:** Breeze-friendly styling with automatic light and dark theme support.
-- **Improved navigation:** Fixed horizontal tabs for Updates, Installed Software, and Held Back.
-- **New application icon:** Custom scalable Gentoo-inspired SVG icon.
-- **Automatic menu refresh:** The installer refreshes KDE Plasma's application menu and icon caches.
-- **Package management:** Check updates, select packages, install, reinstall, and remove software.
-- **Hold management:** Hold specific package versions or entire packages.
-- **System maintenance:** Repository synchronization, dependency cleanup, preserved library rebuilds, and configuration file updates.
-- **Interactive Portage transactions:** Package operations launch in a terminal so users can review and approve changes.
-
-### Requirements
-
-- Gentoo Linux
-- Python 3
-- PySide6 / Qt 6
-- Portage
-- Konsole or another supported terminal emulator
-- sudo or doas configured for administrative operations
-
-### Installation
-
-Install the graphical dependency:
-
-```bash
+```sh
 sudo emerge --ask dev-python/pyside6
 ```
 
-Extract the source archive and run:
+Portage (`emerge`) is required. Install/configure `sudo` or `doas` and a terminal emulator such as Konsole for interactive Portage transactions. For KDE integration, use your preferred Breeze or other Qt widget style.
 
-```bash
+## Install
+
+```sh
 chmod +x install.sh
 ./install.sh
 ```
 
-Launch **Gentoo Update Manager** from the KDE application menu.
+Find **Gentoo Update Manager** in the KDE application launcher (usually System), or run `~/.local/bin/gentoo-update-manager`. Log out/in if your desktop menu caches application entries. Run `./uninstall.sh` to remove the installed app without deleting hold rules.
 
-### Known Limitations
+## Functionality and limitations
 
-This is a preview release. Package transactions currently use an external terminal, and some multi-selection and keyboard features from the original TUI are still being implemented.
+Updates, installed packages, held-back rules, Portage sync, depclean, preserved rebuild, config merging, and technical logs are provided. Config and hold rules remain compatible with the original script (`~/.config/gentoo-update-manager/config.json`). Holds are app-local, not `/etc/portage/package.mask` rules. Package operations open an external terminal to preserve interactive Portage confirmation; recheck/refresh after transactions. This is a preview, not a tested production release; multi-select installed operations and some TUI keyboard behaviors are not yet reproduced. Do not run the GUI as root. Review Portage's proposed actions before approving.
 
-Package hold rules apply within the application rather than modifying Portage's system-wide package masks.
+## Embedded transactions (v1.1 preview)
 
-### Compatibility
+Portage transactions now run in a built-in interactive Qt dialog backed by a
+pseudo-terminal (PTY). **Konsole/xterm are no longer required.** The dialog
+streams output, accepts replies to Portage prompts, and displays the exit code.
 
-Designed exclusively for Gentoo Linux and its Portage package manager.
+Authentication uses `pkexec` when available (requires a running graphical
+Polkit agent), otherwise `sudo` or `doas` using the embedded PTY. Configure
+one of these before running privileged actions. The main GUI runs unprivileged.
 
-### Source Code
+Interactive config merge tools (`dispatch-conf` and `etc-update`) also run
+inside this window. They retain their terminal-oriented interaction, but do
+not open a separate terminal application.
 
-The release includes the original Python backend, Qt 6 frontend, installer, uninstaller, application icon, and documentation.
+This is a preview: it has been syntax-checked but not tested on a live Gentoo
+installation. PTY output currently strips ANSI escape sequences; advanced
+full-screen terminal controls may not render correctly. Avoid using this
+preview for critical upgrades without a tested recovery method.
+
+## Gentoo logo icon (v1.1.2)
+
+The application and desktop launcher use `assets/gentoo-update-manager-256.png`, a blue
+Gentoo-inspired mark with a Breeze-style update arrow. Running `./install.sh`
+replaces the previously installed icon and refreshes KDE's application database.
+If a running launcher still shows the old icon, restart the launcher or log out
+and back in; existing Plasma processes may retain cached pixmaps.
+
+Version 1.1.2 includes a new blue Plasma-style icon featuring the Gentoo g symbol and a refresh badge. The installer installs PNG icons in six sizes and removes the obsolete SVG.

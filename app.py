@@ -40,7 +40,7 @@ class Window(QMainWindow):
         self.setWindowTitle('Gentoo Update Manager')
         self.resize(1120, 740)
         self.setMinimumSize(700, 490)
-        self.setWindowIcon(QIcon(str(HERE / 'assets' / 'gentoo-update-manager.svg')))
+        self.setWindowIcon(QIcon(str(HERE / 'assets' / 'gentoo-update-manager-256.png')))
         root = QWidget(); self.setCentralWidget(root)
         outer = QVBoxLayout(root); outer.setContentsMargins(22, 18, 22, 14); outer.setSpacing(14)
         root.setObjectName('root')
@@ -224,21 +224,21 @@ class Window(QMainWindow):
         self.selected_updates = {p.key for p in self.updates if not self.held(p)}; self.refresh()
     def select_none(self): self.selected_updates.clear(); self.refresh()
     def run_portage(self, cmd, title):
-        if not self.confirm(title, 'Run this Portage operation in a terminal?\n\n' + shlex.join(cmd) + '\n\nPortage will ask for approval before changes are made.'):
+        if not self.confirm(title, 'Run this Portage operation?\n\n' + shlex.join(cmd) +
+                            '\n\nPortage will display its plan and request confirmation inside this window.'):
             return
-        terminals = [('konsole', ['-e']), ('xterm', ['-e']), ('xfce4-terminal', ['--hold', '-x']), ('mate-terminal', ['--',]), ('gnome-terminal', ['--'])]
-        found = next(((name, args) for name, args in terminals if shutil.which(name)), None)
-        if not found:
-            self.notify('Terminal required', 'Install Konsole, xterm, or another supported terminal emulator.'); return
-        # Run a shell only for terminal presentation; every command argument is shell-quoted.
-        prefix = '' if os.geteuid() == 0 else ('sudo ' if shutil.which('sudo') else 'doas ' if shutil.which('doas') else '')
-        if os.geteuid() != 0 and not prefix:
-            self.notify('Authentication required', 'Install and configure sudo or doas.'); return
-        script = prefix + shlex.join(cmd) + '; rc=$?; printf "\\nExit code: %s\\nPress Enter to close…" "$rc"; read answer'
-        name, args = found
-        try: subprocess.Popen([name] + args + ['sh', '-c', script])
-        except OSError as e: self.notify('Launch failed', str(e))
-        self.status.setText('Transaction launched in a terminal. Refresh after it finishes.')
+        from transaction import TransactionDialog
+        dlg = TransactionDialog(self, cmd, title)
+        dlg.exec()
+        if dlg.returncode == 0:
+            self.reload_installed()
+            self.checked = False
+            self.updates.clear()
+            self.selected_updates.clear()
+            self.refresh()
+            self.status.setText('Transaction completed. Check for updates to refresh the proposed changes.')
+        elif dlg.returncode is not None:
+            self.status.setText('Transaction ended with an error or was cancelled. Review the transaction output.')
     def install(self):
         if not self.checked:
             self.notify('Check first', 'Run a successful update check before installing.'); return
