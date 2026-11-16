@@ -11,24 +11,30 @@ import fcntl
 import termios
 from PySide6.QtCore import Qt, QSocketNotifier, QTimer, Signal
 from PySide6.QtGui import QTextCursor
-from PySide6.QtWidgets import (QDialog, QVBoxLayout, QLabel, QPlainTextEdit,
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QPlainTextEdit,
     QLineEdit, QPushButton, QHBoxLayout, QMessageBox)
 
 ANSI = re.compile(r'\x1b(?:\[[0-?]*[ -/]*[@-~]|\][^\x07]*(?:\x07|\x1b\\)|[@-_])')
 
-class TransactionDialog(QDialog):
+class TransactionPanel(QWidget):
     completed = Signal(int)
-    def __init__(self, parent, cmd, title):
+    back_requested = Signal()
+    def __init__(self, parent):
         super().__init__(parent)
-        self.setWindowTitle(title + ' — Gentoo Update Manager')
-        self.resize(900, 610)
         self.pid = None
         self.fd = None
         self.returncode = None
         self._partial = ''
+        self._password_mode = False
         self._last_cr = False
+        self._cached_password = None
+        self._password_retry = None
+        self._auth_prompt_seen = False
+        self._auth_retry_pending = False
         lay = QVBoxLayout(self)
-        lay.addWidget(QLabel('Interactive Portage transaction — review the output before approving changes.'))
+        intro = QLabel('Review Portage output and respond to prompts below. Administrator authentication is requested only for privileged operations.')
+        intro.setWordWrap(True)
+        lay.addWidget(intro)
         self.output = QPlainTextEdit()
         self.output.setReadOnly(True)
         self.output.document().setMaximumBlockCount(12000)
@@ -49,32 +55,80 @@ class TransactionDialog(QDialog):
         self.cancel = QPushButton('Cancel transaction')
         self.cancel.clicked.connect(self.cancel_transaction)
         bottom.addWidget(self.cancel)
-        self.close_btn = QPushButton('Close')
+        self.close_btn = QPushButton('Back to overview')
         self.close_btn.setEnabled(False)
-        self.close_btn.clicked.connect(self.accept)
+        self.close_btn.clicked.connect(self.back_requested.emit)
         bottom.addWidget(self.close_btn)
         lay.addLayout(bottom)
-        self._start(cmd)
+        self.running = False
+
+    def _set_password_mode(self, enabled):
+        self._password_mode = enabled
+        self.entry.setEchoMode(QLineEdit.EchoMode.Password if enabled else QLineEdit.EchoMode.Normal)
+        self.entry.setPlaceholderText('Administrator password (hidden) — press Enter' if enabled else 'Type a response and press Enter (e.g. y or n)')
 
     def _append(self, data):
         # Strip terminal formatting while retaining readable Portage prompts.
         data = ANSI.sub('', data).replace('\r\n', '\n').replace('\r', '\n')
         self.output.moveCursor(QTextCursor.MoveOperation.End)
         self.output.insertPlainText(data)
+        # sudo writes prompts to the PTY without a newline. Never display or
+        # echo credentials; automatically answer using the in-memory session value.
+        tail = self.output.toPlainText()[-400:]
+        prompt = bool(re.search(r'\[Gentoo Update Manager\] Password:\s*$', tail))
+        rejected = 'Sorry, try again.' in tail or 'incorrect password' in tail.lower()
+        if rejected and not self._auth_retry_pending:
+            self._auth_retry_pending = True
+            self._cached_password = None
+            self._auth_prompt_seen = False
+            if self._password_retry:
+                QTimer.singleShot(0, self._password_retry)
+        elif prompt and not self._auth_prompt_seen and not self._auth_retry_pending:
+            self._auth_prompt_seen = True
+            if self._cached_password is not None:
+                QTimer.singleShot(0, lambda: self.provide_password(self._cached_password))
+            elif self._password_retry:
+                self._auth_retry_pending = True
+                QTimer.singleShot(0, self._password_retry)
         self.output.moveCursor(QTextCursor.MoveOperation.End)
 
+    def start(self, cmd, title, password=None, password_retry=None):
+        if self.running:
+            return
+        self.running = True
+        self._cached_password = password
+        self._password_retry = password_retry
+        self._auth_prompt_seen = False
+        self._auth_retry_pending = False
+        self.returncode = None
+        self.output.clear()
+        self._set_password_mode(False)
+        self.entry.setEnabled(True)
+        self.send.setEnabled(True)
+        self.cancel.setEnabled(True)
+        self.close_btn.setEnabled(False)
+        self.state.setText('Starting ' + title + '…')
+        self._start(cmd)
+
+    def provide_password(self, password):
+        if self.fd is None:
+            return
+        self._cached_password = password
+        self._auth_retry_pending = False
+        self._auth_prompt_seen = True
+        try:
+            os.write(self.fd, (password + '\n').encode('utf-8'))
+        except OSError as exc:
+            self._append(f'\nUnable to send authentication: {exc}\n')
+
+    def cancel_authentication(self):
+        if self.fd is not None:
+            try:
+                os.write(self.fd, b'\x03')
+            except OSError:
+                pass
+
     def _start(self, cmd):
-        if os.geteuid() != 0:
-            if shutil.which('pkexec'):
-                cmd = ['pkexec'] + cmd
-            elif shutil.which('sudo'):
-                cmd = ['sudo'] + cmd
-            elif shutil.which('doas'):
-                cmd = ['doas'] + cmd
-            else:
-                self._append('No authentication tool found. Install polkit (pkexec), sudo, or doas.\n')
-                self._finish(127)
-                return
         try:
             pid, fd = pty.fork()
         except OSError as e:
@@ -138,9 +192,13 @@ class TransactionDialog(QDialog):
             os.close(self.fd)
             self.fd = None
         self.pid = None
+        self.running = False
         self.returncode = code
-        self._append(f'\n\nTransaction finished (exit code {code}).\n')
-        self.state.setText('Completed successfully' if code == 0 else f'Finished with exit code {code}')
+        self._cached_password = None
+        self._password_retry = None
+        self._append('\n\n' + ('Operation completed successfully.' if code == 0 else f'Operation failed (exit code {code}).') + '\n')
+        self.state.setText('Completed successfully' if code == 0 else f'Operation failed (exit code {code})')
+        self._set_password_mode(False)
         self.entry.setEnabled(False)
         self.send.setEnabled(False)
         self.cancel.setEnabled(False)
@@ -153,6 +211,8 @@ class TransactionDialog(QDialog):
         try:
             os.write(self.fd, (self.entry.text() + '\n').encode('utf-8'))
             self.entry.clear()
+            if self._password_mode:
+                self._set_password_mode(False)
         except OSError as e:
             self._append(f'\nUnable to send input: {e}\n')
 
@@ -168,9 +228,3 @@ class TransactionDialog(QDialog):
             except OSError:
                 pass
 
-    def reject(self):
-        if self.pid is not None:
-            QMessageBox.information(self, 'Transaction running',
-                'Wait for Portage to finish, or use Cancel transaction to interrupt it.')
-            return
-        super().reject()

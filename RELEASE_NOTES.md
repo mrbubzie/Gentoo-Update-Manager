@@ -37,3 +37,5 @@ This is a preview, not a production-tested release. Package transactions launch 
 ## Source
 
 The release archive includes the original Gentoo update manager backend, the Qt frontend, the installer/uninstaller, the SVG icon, and README.
+
+See CHANGELOG-v1.2.3.md for the integrated interface and authentication changes.
