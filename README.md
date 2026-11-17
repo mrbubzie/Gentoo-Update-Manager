@@ -1,4 +1,7 @@
-# Gentoo Update Manager — Rust + GTK 4 v0.3.0
+# Gentoo Update Manager — Rust + GTK 4 v2.0-RC1
+
+<img width="2560" height="1585" alt="Screenshot_20261117_000932" src="https://github.com/user-attachments/assets/1ca45e9d-2052-4a6b-bad8-8fc188d936d9" />
+
 
 Native Gentoo Portage management interface with navy, violet and teal styling inspired by Asahi Startup Disk.
 
@@ -18,8 +21,10 @@ Native Gentoo Portage management interface with navy, violet and teal styling in
 On Gentoo install Rust/Cargo, GTK 4 development files and pkg-config, then:
 
 ```sh
-chmod +x install.sh diagnose.sh
-./install.sh
+unzip Gentoo-Update-Manager-2.0-RC1-final.zip
+cd Gentoo-Update-Manager-2.0-RC1-final
+chmod +x install.sh to install or chmod +x uninstall.sh to uninstall
+./install.sh to install ./uninstall.sh to uninstall
 ```
 
 Launch **Gentoo Update Manager (GTK4)** from the KDE menu. If it does not launch, run `./diagnose.sh`.
