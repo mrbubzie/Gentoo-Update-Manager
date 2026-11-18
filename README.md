@@ -5,7 +5,7 @@
 
 Native Gentoo Portage management interface with navy, violet and teal styling inspired by Asahi Startup Disk.
 
-## Changes
+## Recent Changes 2.0-Final
 - Includes the existing Portage package-atom validation fix and prior GTK4 interface updates. No new functional changes are claimed in this 2.0-final update.
 
 
