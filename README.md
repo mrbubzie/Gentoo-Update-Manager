@@ -16,8 +16,8 @@ Note: The application has not been compiled or tested on a live Gentoo desktop i
 On Gentoo install Rust/Cargo, GTK 4 development files and pkg-config, then:
 
 ```sh
-unzip Gentoo-Update-Manager-2.0-RC1-final.zip
-cd Gentoo-Update-Manager-2.0-RC1-final
+unzip Gentoo-Update-Manager-2.0-final.zip
+cd Gentoo-Update-Manager-2.0-final
 chmod +x install.sh to install or chmod +x uninstall.sh to uninstall
 ./install.sh to install ./uninstall.sh to uninstall
 ```
