@@ -28,7 +28,3 @@ Launch **Gentoo Update Manager (GTK4)** from the KDE menu. If it does not launch
 
 This is a **development preview**, not yet a full replacement for the previous Qt version. The Held Back screen currently reads system masks but does not edit them. Privileged operations use sudo with a password cached in the app's process memory. The application does not provide a fully interactive PTY for all Portage prompts; review transactions carefully. The source has not been compiled or tested in a live Gentoo GTK session here.
 
-
-## v2.0 RC1 polish
-
-Bundled white sidebar icons, single-line labels, balanced maintenance grid, and elapsed time for Portage update queries. See CHANGELOG-v2.0 RC1.md.
