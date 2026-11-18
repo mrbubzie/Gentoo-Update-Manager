@@ -1,4 +1,4 @@
-# Gentoo Update Manager — Rust + GTK 4 v2.0-RC1
+# Gentoo Update Manager — Rust + GTK 4 v2.0-final
 
 <img width="2560" height="1585" alt="Screenshot_20261117_000932" src="https://github.com/user-attachments/assets/1ca45e9d-2052-4a6b-bad8-8fc188d936d9" />
 
@@ -6,15 +6,10 @@
 Native Gentoo Portage management interface with navy, violet and teal styling inspired by Asahi Startup Disk.
 
 ## Changes
+- Includes the existing Portage package-atom validation fix and prior GTK4 interface updates. No new functional changes are claimed in this 2.0-final update.
 
-- Overview now contains a focused dashboard; package queries and selection are confined to their own pages.
-- Updates parses only valid `[ebuild ...]` Portage entries. No selectable output headings or empty rows.
-- Installed packages are discovered from `/var/db/pkg` without requiring optional `qlist`.
-- Package queries run asynchronously, report errors, and discard stale results when navigating away.
-- Consistent GTK symbolic sidebar icons, active-page highlighting, compact maintenance cards.
-- Transaction output is collapsible and automatically expands when operations begin.
-- Gentoo detection checks `/etc/os-release`, `ID_LIKE`, `/etc/gentoo-release`, and Portage's package database.
-- Existing blue Gentoo icon, session password popup and separate desktop launcher retained.
+
+Note: The application has not been compiled or tested on a live Gentoo desktop in this environment.
 
 ## Install
 
